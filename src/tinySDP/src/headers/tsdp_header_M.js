@@ -280,6 +280,121 @@ tsdp_header_M.prototype.find_a = function(s_field) {
 	return this.find_a_at(s_field, 0);
 }
 
+
+tsdp_header_M.prototype.have_encoder = function(encoder)
+{
+        if(!encoder || typeof(encoder) == 'undefined')
+                return null;
+
+        // remove fmtp in a line
+        for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i )
+        {
+                if ( this.ao_hdr_A[i].s_field == 'rtpmap')
+                {
+                        var n_encoder = this.ao_hdr_A[i].s_value.indexOf(encoder);
+                        if( n_encoder >= 0 )
+                        {
+                                var pt = this.ao_hdr_A[i].s_value.substring(0, n_encoder-1);
+                                // tsk_utils_log_info("have_encoder: " + pt );
+                                return pt ;
+                        }
+                }
+        }
+
+        return null;
+}
+
+
+tsdp_header_M.prototype.move_encoder = function( payload )
+{
+
+        if( !payload )
+        {
+                tsk_utils_log_info('move_encoder pt is null, and return.');
+                return;
+        }
+
+        var fmtp_pt = null;
+
+        // remove fmtp in a line
+        for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i )
+        {
+                if ( this.ao_hdr_A[i].s_field == 'rtpmap' || this.ao_hdr_A[i].s_field == 'rtcp-fb' ||this.ao_hdr_A[i].s_field == 'fmtp' )
+                {
+                        var payload_falg = this.ao_hdr_A[i].s_value.indexOf(payload);
+                        var apt_falg = this.ao_hdr_A[i].s_value.indexOf('apt');
+                        if( payload_falg == 0)
+                        {
+                                this.ao_hdr_A.splice(i,1);
+                                --i;
+                        }
+                        if ( tsk_utils_get_navigator_friendly_name() == "firefox" )
+                        {
+                                if( payload_falg > 0 && ( payload == 121 || payload == 120 ) )
+                                   this.ao_hdr_A[i].s_value = '122 126/97/123';
+                        }
+                       
+                       if( payload_falg > 0 && apt_falg >= 0 )
+                        {
+                                var reg;
+                                reg = /[0-9]*[1-9][0-9]*/;
+                                fmtp_pt = reg.exec(this.ao_hdr_A[i].s_value);
+                                this.ao_hdr_A.splice(i,1);
+                                --i; 
+                        }
+                }
+        }
+
+        if( fmtp_pt )
+        {
+                for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i )
+                {
+                        if ( this.ao_hdr_A[i].s_field == 'rtpmap' )
+                        {
+                                var payload_falg = this.ao_hdr_A[i].s_value.indexOf(fmtp_pt);
+                                if( payload_falg >= 0 )
+                                {
+                                        //tsk_utils_log_info("move_encoder: " + this.ao_hdr_A[i].s_value );
+                                        this.ao_hdr_A.splice(i,1);
+                                        --i;
+                                }
+                        }
+                }
+        }
+
+        // remove fmtp in m line
+        for( var i = 0; i < this.as_fmt.length; ++i )
+        {
+                //tsk_utils_log_info("move_encoder m: "+ payload);
+                if( this.as_fmt[i] == payload || this.as_fmt[i] == fmtp_pt )
+                {
+                        this.as_fmt.splice( i, 1 );
+                        --i;
+                }
+        }
+
+}
+
+
+tsdp_header_M.prototype.set_start_bitrate = function()
+{
+        for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i )
+        {
+                if ( this.ao_hdr_A[i].s_field == 'fmtp' )
+                {
+                        var pt_index = this.ao_hdr_A[i].s_value.indexOf('107');
+                        if( pt_index >= 0 )
+                        {
+                                this.ao_hdr_A[i].s_value = this.ao_hdr_A[i].s_value + ';x-google-min-bitrate=10530;x-google-start-bitrate=10532;x-google-max-bitrate=10535';
+                                return ;
+                        }
+                }
+        }
+}
+
+
+
+
 tsdp_header_M.prototype.get_rtpmap = function(s_fmt){
 	var i_fmt_len = s_fmt ? s_fmt.length : 0;
 	if(i_fmt_len <= 0 || i_fmt_len > 3/*'0-255' or '*'*/){
@@ -332,6 +447,181 @@ tsdp_header_M.prototype.get_fmtp = function(s_fmt){
 	}
 
 	return s_fmtp;
+}
+
+/*For remove rtx / red / ulpfec*/
+tsdp_header_M.prototype.move_sdp_a = function(str)
+{
+
+    if (str == "rtcp") {
+      
+      for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i ) {
+          //Remove rtcp-fb nack
+          if ( this.ao_hdr_A[i].s_field == 'rtcp' ){
+              this.ao_hdr_A.splice(i, 1);
+              i--;
+          }
+      }
+
+      return;
+    }
+
+    if (str != 'nack' ) {
+        var pt = this.have_encoder(str);
+
+        while ( pt != undefined )
+        {        
+            this.move_encoder(pt);
+            pt = this.have_encoder(str);
+        }
+
+
+    }    
+    /*    
+    if( str == 'ulpfec' )
+    {
+        for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i )
+        {
+            if ( this.ao_hdr_A[i].s_field == 'rtpmap' )
+            {
+                var payload = this.ao_hdr_A[i].s_value.match(/\d+/)[0];
+
+                var b_index = this.ao_hdr_A[i].s_value.indexOf(str);
+                if( b_index >= 0 )
+                {
+                    this.ao_hdr_A.splice(i, 1);
+
+                    //Remove the payload type on M line
+                    for( var i = 0; i < this.as_fmt.length; ++i )
+                    {
+                        if( this.as_fmt[i] == payload )
+                        {
+                            //tsk_utils_log_info("move_encoder m: "+ payload);
+                            this.as_fmt.splice( i, 1 );
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if( str == 'red' )
+    {
+        for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i )
+        {
+            if ( this.ao_hdr_A[i].s_field == 'rtpmap' )
+            {
+                var payload = this.ao_hdr_A[i].s_value.match(/\d+/)[0];
+
+                var b_index_rtx = this.ao_hdr_A[i].s_value.indexOf('98');
+                var b_index = this.ao_hdr_A[i].s_value.indexOf(str);
+                if( b_index >= 0 || b_index_rtx >= 0 )
+                {
+                    this.ao_hdr_A.splice(i, 1);
+
+                    //Remove the payload type on M line
+                    for( var i = 0; i < this.as_fmt.length; ++i )
+                    {
+                        if( this.as_fmt[i] == payload )
+                        {
+                            //tsk_utils_log_info("move_encoder m: "+ payload);
+                            this.as_fmt.splice( i, 1 );
+                            break;
+                        }
+                    }
+
+                }
+            }
+
+            if ( this.ao_hdr_A[i].s_field == 'fmtp' )
+            {
+                var b_index_1 = this.ao_hdr_A[i].s_value.indexOf('98');
+                if( b_index_1 >= 0 )
+                {
+                    this.ao_hdr_A.splice(i, 1);
+                    i--;
+                }
+            }
+
+        }
+    }
+
+    if( str == 'rtx' ) 
+    {
+        for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i )
+        {
+
+            if ( (this.ao_hdr_A[i].s_field == 'rtpmap') || (this.ao_hdr_A[i].s_field == "fmtp") )
+            {   
+                
+                var payload = this.ao_hdr_A[i].s_value.match(/\d+/)[0];
+
+                var b_index = this.ao_hdr_A[i].s_value.indexOf(str);
+                var b_index_1 = this.ao_hdr_A[i].s_value.indexOf('apt');
+                if( b_index >= 0 || b_index_1 >=0 )
+                {
+                    this.ao_hdr_A.splice(i, 1);
+                    i--;
+
+                    //Remove the payload type on M line
+                    for( var i = 0; i < this.as_fmt.length; ++i )
+                    {
+                        if( this.as_fmt[i] == payload )
+                        {
+                            //tsk_utils_log_info("move_encoder m: "+ payload);
+                            this.as_fmt.splice( i, 1 );
+                            break;
+                        }
+                    }
+
+                }
+            }
+            
+			//Remove rtcp-fb nack
+            //if ( this.ao_hdr_A[i].s_field == 'rtcp-fb' )
+            //{
+            //    var b_index = this.ao_hdr_A[i].s_value.indexOf("nack");
+            //    if( b_index >= 0 )
+            //    {
+            //        this.ao_hdr_A.splice(i, 1);
+            //        i--;
+            //    }
+            //}
+        }
+    }
+    */
+    if( str == 'nack' ) 
+    {
+        for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i ) 
+        {            
+            //Remove rtcp-fb nack
+            if ( this.ao_hdr_A[i].s_field == 'rtcp-fb' )
+            {
+                var b_index = this.ao_hdr_A[i].s_value.indexOf("nack");
+                if( b_index >= 0 )
+                {
+                     this.ao_hdr_A.splice(i, 1);
+                     i--;
+                }
+            }
+        }
+    }
+
+    //Remove remb nack
+    for ( var i = 0; i < this.ao_hdr_A.length - 1; ++i )
+    {
+        if ( this.ao_hdr_A[i].s_field == 'rtcp-fb' )
+        {
+            var b_index = this.ao_hdr_A[i].s_value.indexOf("goog-remb");
+            if( b_index >= 0 ) {
+                this.ao_hdr_A.splice(i, 1);
+                i--;
+            }
+        }
+    }    
+
+    return ;
 }
 
 /* as per 3GPP TS 34.610 */
@@ -596,3 +886,33 @@ case 4:
 	
 	return hdr_M;
 }
+
+
+
+tsdp_header_M.prototype.change_pt = function(s_pt,d_pt)
+{
+    if( !s_pt || !d_pt || typeof (s_pt) == 'undefined' || typeof (d_pt) == 'undefined' ) {
+        return;
+    }
+
+    // change pt in m line
+    var i;
+    for ( i = 0; i < this.as_fmt.length; ++i ) {
+        if (s_pt == this.as_fmt[i]) {
+            this.as_fmt[i] = d_pt;
+            break;
+        }
+    }
+    // change pt in a line
+    for ( i = 0; i < this.ao_hdr_A.length; ++i ) {
+        if ( this.ao_hdr_A[i].s_field == 'rtpmap' || this.ao_hdr_A[i].s_field == 'rtcp-fb' || this.ao_hdr_A[i].s_field == 'fmtp' ) {
+            var payload_falg = this.ao_hdr_A[i].s_value.indexOf(s_pt);
+            if( payload_falg == 0 ) {
+                this.ao_hdr_A[i].s_value = this.ao_hdr_A[i].s_value.replace(/([0-9]+)/, d_pt);
+            } else if ( this.ao_hdr_A[i].s_value.indexOf("apt="+s_pt) > 0 ){
+                this.ao_hdr_A[i].s_value = this.ao_hdr_A[i].s_value.replace(/apt=([0-9]+)/, "apt="+d_pt);    
+            }        
+        }
+    }
+}
+

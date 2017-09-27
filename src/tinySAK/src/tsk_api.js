@@ -16,7 +16,6 @@ function tsk_api_add_js_script(s_elt) {
 
 tsk_api_add_js_script('head',
     './src/adapter.js',
-
     './src/tinySAK/src/tsk_base64.js',
     './src/tinySAK/src/tsk_buff.js',
     './src/tinySAK/src/tsk_fsm.js',

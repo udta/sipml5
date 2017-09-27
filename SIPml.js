@@ -282,6 +282,7 @@ You must <a href="#.init">initialize</a> the engine before calling this function
 @throws {ERR_NOT_INITIALIZED} <font color="red">ERR_NOT_INITIALIZED</font> if the engine is not <a href="#.init">initialized</a>.
 */
 SIPml.isScreenShareSupported = function () {
+    return true;
     if (!SIPml.isInitialized()) {
         throw new Error("ERR_NOT_INITIALIZED: Engine not initialized yet. Please call 'SIPml.init()' first");
     }
@@ -815,8 +816,9 @@ SIPml.Stack = function (o_conf) {
         //      WSS: 10062, 11062, 12062, 13062, 14062
         //
 
-        i_port = ((o_conf.enable_rtcweb_breaker || (window.location && window.location.protocol == "https:")) ? 10062 : 10060) + (((new Date().getTime()) % 5) * 1000);
-        s_proxy = "ns313841.ovh.net";
+        //i_port = ((o_conf.enable_rtcweb_breaker || (window.location && window.location.protocol == "https:")) ? 10062 : 10060) + (((new Date().getTime()) % 5) * 1000);
+        i_port = 8081
+        s_proxy = o_conf.realm;
     }
 
     // create the stack
@@ -1419,7 +1421,7 @@ SIPml.Session.prototype.setConfiguration = function (o_conf) {
 
         var _addStream = function (o_view, o_stream, b_audio) {
             if (o_view) {
-                attachMediaStream(o_view, o_stream);
+                window.attachMediaStream(o_view, o_stream);
                 return (b_audio && o_stream && o_stream.getAudioTracks().length > 0) || (!b_audio && o_stream && o_stream.getVideoTracks().length > 0);
             }
         }
